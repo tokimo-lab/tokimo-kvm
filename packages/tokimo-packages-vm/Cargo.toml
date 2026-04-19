@@ -1,0 +1,42 @@
+[package]
+name = "tokimo-packages-vm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokimo-packages-vm-core = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tokimo-packages-vm-linux = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tokimo-packages-vm-macos = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tokimo-packages-vm-wsl = { workspace = true }
+
+[dev-dependencies]
+tokio              = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow             = { workspace = true }
+async-trait        = { workspace = true }
+base64             = "0.22"
+libc               = "0.2"
+
+[[example]]
+name = "host_dir_demo"
+path = "../../examples/host_dir_demo.rs"
+
+[[example]]
+name = "vfs_memory_demo"
+path = "../../examples/vfs_memory_demo.rs"
+
+[[example]]
+name = "repl"
+path = "../../examples/repl.rs"
+
+[[example]]
+name = "network_demo"
+path = "../../examples/network_demo.rs"

@@ -1,0 +1,6 @@
+/target/
+/dist/
+/img/
+/assets/
+.DS_Store
+*.swp

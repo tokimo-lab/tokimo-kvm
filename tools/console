@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Tail a sandbox's serial log. Usage: tools/console <serial.log or runtime_dir>
+set -euo pipefail
+p="${1:-}"
+if [ -z "$p" ]; then
+    echo "usage: $0 <serial.log | runtime_dir>" >&2
+    exit 1
+fi
+if [ -d "$p" ]; then p="$p/serial.log"; fi
+exec tail -F "$p"

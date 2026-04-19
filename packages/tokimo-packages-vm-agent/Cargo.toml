@@ -1,0 +1,22 @@
+[package]
+name = "tokimo-packages-vm-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tokimo-agent"
+path = "src/main.rs"
+
+[dependencies]
+tokimo-packages-vm-core = { workspace = true }
+tokimo-packages-vm-rpc  = { workspace = true }
+anyhow      = { workspace = true }
+tokio       = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "net", "io-util", "time"] }
+clap        = { workspace = true }
+libc        = { workspace = true }
+tracing     = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fuser = { version = "0.14", default-features = false }

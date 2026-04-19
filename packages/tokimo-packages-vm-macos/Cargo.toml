@@ -1,0 +1,60 @@
+[package]
+name = "tokimo-packages-vm-macos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokimo-packages-vm-core = { workspace = true }
+tokimo-packages-vm-rpc  = { workspace = true }
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
+tokio       = { workspace = true }
+tracing     = { workspace = true }
+parking_lot = { workspace = true }
+libc        = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2          = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSString", "NSURL", "NSError", "NSArray", "NSFileHandle",
+] }
+block2         = "0.6"
+dispatch2      = "0.3"
+objc2-virtualization = { version = "0.3", features = [
+    "dispatch2",
+    "block2",
+    "VZBootLoader",
+    "VZLinuxBootLoader",
+    "VZVirtualMachine",
+    "VZVirtualMachineConfiguration",
+    "VZPlatformConfiguration",
+    "VZGenericPlatformConfiguration",
+    "VZDirectoryShare",
+    "VZSingleDirectoryShare",
+    "VZSharedDirectory",
+    "VZDirectorySharingDeviceConfiguration",
+    "VZVirtioFileSystemDeviceConfiguration",
+    "VZConsoleDevice",
+    "VZConsoleDeviceConfiguration",
+    "VZConsolePortConfiguration",
+    "VZVirtioConsoleDevice",
+    "VZVirtioConsoleDeviceConfiguration",
+    "VZVirtioConsolePort",
+    "VZVirtioConsolePortArray",
+    "VZVirtioConsolePortConfiguration",
+    "VZVirtioConsolePortConfigurationArray",
+    "VZSerialPortConfiguration",
+    "VZVirtioConsoleDeviceSerialPortConfiguration",
+    "VZSerialPortAttachment",
+    "VZFileHandleSerialPortAttachment",
+    "VZEntropyDeviceConfiguration",
+    "VZVirtioEntropyDeviceConfiguration",
+    "VZStorageDeviceConfiguration",
+    "VZVirtioBlockDeviceConfiguration",
+    "VZDiskImageStorageDeviceAttachment",
+    "VZNetworkDeviceConfiguration",
+    "VZVirtioNetworkDeviceConfiguration",
+    "VZNetworkDeviceAttachment",
+    "VZNATNetworkDeviceAttachment",
+] }

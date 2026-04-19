@@ -1,0 +1,13 @@
+[package]
+name = "tokimo-packages-vm-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+tokio       = { workspace = true }
+tracing     = { workspace = true }
+uuid        = { workspace = true, features = ["serde"] }
