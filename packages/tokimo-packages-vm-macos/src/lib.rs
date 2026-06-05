@@ -28,10 +28,11 @@
 //!   fine during development.
 
 use async_trait::async_trait;
+#[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use tokimo_packages_vm_core::{
-    Error, ExecOutput, ExecSpec, MountId, MountSpec, Result, Sandbox, SandboxConfig,
-    SandboxId, SandboxState,
+    Error, ExecOutput, ExecSpec, MountId, MountSpec, Result, Sandbox, SandboxConfig, SandboxId,
+    SandboxState,
 };
 
 #[cfg(target_os = "macos")]
@@ -68,9 +69,15 @@ impl MacosSandbox {
 #[cfg(target_os = "macos")]
 #[async_trait]
 impl Sandbox for MacosSandbox {
-    fn id(&self) -> SandboxId { self.id }
-    fn state(&self) -> SandboxState { self.state }
-    fn config(&self) -> &SandboxConfig { &self.config }
+    fn id(&self) -> SandboxId {
+        self.id
+    }
+    fn state(&self) -> SandboxState {
+        self.state
+    }
+    fn config(&self) -> &SandboxConfig {
+        &self.config
+    }
 
     async fn start(&mut self) -> Result<()> {
         if self.state != SandboxState::Created {
@@ -105,15 +112,17 @@ impl Sandbox for MacosSandbox {
 
     async fn add_mount(&mut self, _spec: MountSpec) -> Result<MountId> {
         Err(Error::Unsupported(
-            "hot mount add not yet implemented on macOS — declare mounts in SandboxConfig"
+            "hot mount add not yet implemented on macOS — declare mounts in SandboxConfig",
         ))
     }
     async fn remove_mount(&mut self, _id: MountId) -> Result<()> {
-        Err(Error::Unsupported("hot mount remove not yet implemented on macOS"))
+        Err(Error::Unsupported(
+            "hot mount remove not yet implemented on macOS",
+        ))
     }
     async fn exec(&self, _spec: ExecSpec) -> Result<ExecOutput> {
         Err(Error::Unsupported(
-            "guest exec requires a guest agent (not yet wired up in v0.1)"
+            "guest exec requires a guest agent (not yet wired up in v0.1)",
         ))
     }
     async fn wait(&mut self) -> Result<()> {
@@ -123,7 +132,9 @@ impl Sandbox for MacosSandbox {
         }
         Ok(())
     }
-    fn serial_log_path(&self) -> Option<PathBuf> { self.serial_log.clone() }
+    fn serial_log_path(&self) -> Option<PathBuf> {
+        self.serial_log.clone()
+    }
 }
 
 // ---------------------------- non-macOS stub ----------------------------
@@ -131,13 +142,31 @@ impl Sandbox for MacosSandbox {
 #[cfg(not(target_os = "macos"))]
 #[async_trait]
 impl Sandbox for MacosSandbox {
-    fn id(&self) -> SandboxId { self.id }
-    fn state(&self) -> SandboxState { self.state }
-    fn config(&self) -> &SandboxConfig { &self.config }
-    async fn start(&mut self) -> Result<()> { Err(Error::Unsupported("macOS backend only runs on macOS")) }
-    async fn stop(&mut self) -> Result<()> { Err(Error::Unsupported("macOS backend only runs on macOS")) }
-    async fn add_mount(&mut self, _spec: MountSpec) -> Result<MountId> { Err(Error::Unsupported("macOS backend only runs on macOS")) }
-    async fn remove_mount(&mut self, _id: MountId) -> Result<()> { Err(Error::Unsupported("macOS backend only runs on macOS")) }
-    async fn exec(&self, _spec: ExecSpec) -> Result<ExecOutput> { Err(Error::Unsupported("macOS backend only runs on macOS")) }
-    async fn wait(&mut self) -> Result<()> { Err(Error::Unsupported("macOS backend only runs on macOS")) }
+    fn id(&self) -> SandboxId {
+        self.id
+    }
+    fn state(&self) -> SandboxState {
+        self.state
+    }
+    fn config(&self) -> &SandboxConfig {
+        &self.config
+    }
+    async fn start(&mut self) -> Result<()> {
+        Err(Error::Unsupported("macOS backend only runs on macOS"))
+    }
+    async fn stop(&mut self) -> Result<()> {
+        Err(Error::Unsupported("macOS backend only runs on macOS"))
+    }
+    async fn add_mount(&mut self, _spec: MountSpec) -> Result<MountId> {
+        Err(Error::Unsupported("macOS backend only runs on macOS"))
+    }
+    async fn remove_mount(&mut self, _id: MountId) -> Result<()> {
+        Err(Error::Unsupported("macOS backend only runs on macOS"))
+    }
+    async fn exec(&self, _spec: ExecSpec) -> Result<ExecOutput> {
+        Err(Error::Unsupported("macOS backend only runs on macOS"))
+    }
+    async fn wait(&mut self) -> Result<()> {
+        Err(Error::Unsupported("macOS backend only runs on macOS"))
+    }
 }

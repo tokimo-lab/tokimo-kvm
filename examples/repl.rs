@@ -35,27 +35,34 @@ impl RawMode {
         unsafe {
             let fd = io::stdin().as_raw_fd();
             let mut saved: libc::termios = std::mem::zeroed();
-            if libc::tcgetattr(fd, &mut saved) != 0 { return None; }
+            if libc::tcgetattr(fd, &mut saved) != 0 {
+                return None;
+            }
             let mut raw = saved;
             libc::cfmakeraw(&mut raw);
             // Keep OPOST so '\n' renders as CRLF on our stdout.
             raw.c_oflag |= libc::OPOST;
-            if libc::tcsetattr(fd, libc::TCSANOW, &raw) != 0 { return None; }
+            if libc::tcsetattr(fd, libc::TCSANOW, &raw) != 0 {
+                return None;
+            }
             Some(RawMode { fd, saved })
         }
     }
 }
 impl Drop for RawMode {
     fn drop(&mut self) {
-        unsafe { libc::tcsetattr(self.fd, libc::TCSANOW, &self.saved); }
+        unsafe {
+            libc::tcsetattr(self.fd, libc::TCSANOW, &self.saved);
+        }
     }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("tokimo=warn".parse()?))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("tokimo=warn".parse()?),
+        )
         .init();
 
     let cwd = std::env::current_dir()?;
@@ -74,13 +81,16 @@ async fn main() -> anyhow::Result<()> {
     println!(">>> booting tokimo sandbox (cwd -> /work, network on)");
     sbx.start().await?;
 
-    let sock_path = sbx.serial_socket_path()
+    let sock_path = sbx
+        .serial_socket_path()
         .ok_or_else(|| anyhow::anyhow!("interactive serial not enabled"))?;
     println!(">>> serial socket: {}", sock_path.display());
 
     // Wait for QEMU to create the listener.
     for _ in 0..50 {
-        if sock_path.exists() { break; }
+        if sock_path.exists() {
+            break;
+        }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     let stream = UnixStream::connect(&sock_path).await?;
@@ -98,29 +108,40 @@ async fn main() -> anyhow::Result<()> {
         let mut buf = [0u8; 1024];
         let mut pending_ctrla = false;
         loop {
-            let n = match handle.read(&mut buf) { Ok(0) => return, Ok(n) => n, Err(_) => return };
+            let n = match handle.read(&mut buf) {
+                Ok(0) => return,
+                Ok(n) => n,
+                Err(_) => return,
+            };
             let mut out = Vec::with_capacity(n);
             for &b in &buf[..n] {
                 if pending_ctrla {
                     pending_ctrla = false;
-                    if b == b'x' || b == b'X' { std::process::exit(0); }
+                    if b == b'x' || b == b'X' {
+                        std::process::exit(0);
+                    }
                     // Otherwise pass through the Ctrl-A we swallowed.
                     out.push(0x01);
                     out.push(b);
-                } else if b == 0x01 { // Ctrl-A
+                } else if b == 0x01 {
+                    // Ctrl-A
                     pending_ctrla = true;
                 } else {
                     out.push(b);
                 }
             }
-            if !out.is_empty() && tx.blocking_send(out).is_err() { return; }
+            if !out.is_empty() && tx.blocking_send(out).is_err() {
+                return;
+            }
         }
     });
 
     // stdin -> guest
     let writer_task = tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
-            if writer.write_all(&data).await.is_err() { break; }
+            if writer.write_all(&data).await.is_err() {
+                break;
+            }
             let _ = writer.flush().await;
         }
     });
@@ -132,7 +153,9 @@ async fn main() -> anyhow::Result<()> {
         match reader.read(&mut buf).await {
             Ok(0) => break,
             Ok(n) => {
-                if stdout.write_all(&buf[..n]).is_err() { break; }
+                if stdout.write_all(&buf[..n]).is_err() {
+                    break;
+                }
                 let _ = stdout.flush();
             }
             Err(_) => break,

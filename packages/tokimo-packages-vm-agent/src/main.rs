@@ -10,4 +10,6 @@ fn main() {
 mod imp;
 
 #[cfg(target_os = "linux")]
-fn main() -> anyhow::Result<()> { imp::run() }
+fn main() -> anyhow::Result<()> {
+    imp::run()
+}

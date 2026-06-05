@@ -2,9 +2,8 @@
 
 use clap::Parser;
 use fuser::{
-    FileAttr as FuseAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyCreate,
-    ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request,
-    TimeOrNow,
+    FileAttr as FuseAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyCreate, ReplyData,
+    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request, TimeOrNow,
 };
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -13,10 +12,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::runtime::Runtime;
 use tokimo_packages_vm_core::{FileAttr, FsKind, VfsError};
 use tokimo_packages_vm_rpc::Client;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::runtime::Runtime;
 
 const TTL: Duration = Duration::from_secs(1);
 
@@ -27,15 +26,28 @@ struct StdioDuplex {
     w: tokio::io::Stdout,
 }
 impl StdioDuplex {
-    fn new() -> Self { Self { r: tokio::io::stdin(), w: tokio::io::stdout() } }
+    fn new() -> Self {
+        Self {
+            r: tokio::io::stdin(),
+            w: tokio::io::stdout(),
+        }
+    }
 }
 impl AsyncRead for StdioDuplex {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.r).poll_read(cx, buf)
     }
 }
 impl AsyncWrite for StdioDuplex {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, b: &[u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        b: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
         Pin::new(&mut self.w).poll_write(cx, b)
     }
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
@@ -85,15 +97,24 @@ pub fn run() -> anyhow::Result<()> {
         eprintln!("tokimo-agent: using stdio transport");
         // Join stdin + stdout into a single duplex AsyncRead+AsyncWrite.
         let joined = StdioDuplex::new();
-        let c = rt.block_on(async { Client::handshake_from_stream(joined).await })
-            .map_err(|e| { eprintln!("tokimo-agent: stdio handshake failed: {e:#}"); e })?;
+        let c = rt
+            .block_on(async { Client::handshake_from_stream(joined).await })
+            .map_err(|e| {
+                eprintln!("tokimo-agent: stdio handshake failed: {e:#}");
+                e
+            })?;
         c
     } else {
-        let port = args.port_name.clone()
+        let port = args
+            .port_name
+            .clone()
             .ok_or_else(|| anyhow::anyhow!("either --port-name or --stdio is required"))?;
         eprintln!("tokimo-agent: connecting to virtio-serial port {port}");
         rt.block_on(async { Client::connect_port(&port).await })
-            .map_err(|e| { eprintln!("tokimo-agent: connect_port failed: {e:#}"); e })?
+            .map_err(|e| {
+                eprintln!("tokimo-agent: connect_port failed: {e:#}");
+                e
+            })?
     };
     eprintln!("tokimo-agent: connected; mounting FUSE at {:?}", args.mount);
     std::fs::create_dir_all(&args.mount).ok();
@@ -129,15 +150,25 @@ struct TokimoFuse {
 }
 
 impl TokimoFuse {
-    fn root_path() -> PathBuf { PathBuf::from("/") }
+    fn root_path() -> PathBuf {
+        PathBuf::from("/")
+    }
 
     fn path_for(&self, ino: u64) -> Option<PathBuf> {
-        if ino == 1 { Some(Self::root_path()) } else { self.inodes.get(&ino).cloned() }
+        if ino == 1 {
+            Some(Self::root_path())
+        } else {
+            self.inodes.get(&ino).cloned()
+        }
     }
 
     fn intern(&mut self, path: PathBuf) -> u64 {
-        if path == Path::new("/") { return 1; }
-        if let Some(&ino) = self.rev.get(&path) { return ino; }
+        if path == Path::new("/") {
+            return 1;
+        }
+        if let Some(&ino) = self.rev.get(&path) {
+            return ino;
+        }
         let ino = self.next_ino;
         self.next_ino += 1;
         self.inodes.insert(ino, path.clone());
@@ -162,7 +193,7 @@ impl TokimoFuse {
         FuseAttr {
             ino,
             size: a.size,
-            blocks: (a.size + 511) / 512,
+            blocks: a.size.div_ceil(512),
             atime: t(a.atime_secs),
             mtime: t(a.mtime_secs),
             ctime: t(a.ctime_secs),
@@ -170,8 +201,11 @@ impl TokimoFuse {
             kind,
             perm: (a.mode & 0o7777) as u16,
             nlink: if matches!(a.kind, FsKind::Dir) { 2 } else { 1 },
-            uid: 0, gid: 0,
-            rdev: 0, blksize: 4096, flags: 0,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            blksize: 4096,
+            flags: 0,
         }
     }
 }
@@ -195,7 +229,10 @@ fn join(parent: &Path, name: &OsStr) -> PathBuf {
 
 impl Filesystem for TokimoFuse {
     fn lookup(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        let p = match self.path_for(parent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(parent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let path = join(&p, name);
         let client = self.client.clone();
         let path2 = path.clone();
@@ -211,7 +248,10 @@ impl Filesystem for TokimoFuse {
     }
 
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
-        let p = match self.path_for(ino) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(ino) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let client = self.client.clone();
         let res = self.rt.block_on(async move { client.stat(&p).await });
         match res {
@@ -224,18 +264,36 @@ impl Filesystem for TokimoFuse {
     }
 
     fn setattr(
-        &mut self, _req: &Request<'_>, ino: u64, _mode: Option<u32>, _uid: Option<u32>,
-        _gid: Option<u32>, size: Option<u64>, _atime: Option<TimeOrNow>,
-        _mtime: Option<TimeOrNow>, _ctime: Option<SystemTime>, _fh: Option<u64>,
-        _crtime: Option<SystemTime>, _chgtime: Option<SystemTime>, _bkuptime: Option<SystemTime>,
-        _flags: Option<u32>, reply: ReplyAttr,
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        _mode: Option<u32>,
+        _uid: Option<u32>,
+        _gid: Option<u32>,
+        size: Option<u64>,
+        _atime: Option<TimeOrNow>,
+        _mtime: Option<TimeOrNow>,
+        _ctime: Option<SystemTime>,
+        _fh: Option<u64>,
+        _crtime: Option<SystemTime>,
+        _chgtime: Option<SystemTime>,
+        _bkuptime: Option<SystemTime>,
+        _flags: Option<u32>,
+        reply: ReplyAttr,
     ) {
-        let p = match self.path_for(ino) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(ino) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         if let Some(sz) = size {
             let client = self.client.clone();
             let p2 = p.clone();
-            let r = self.rt.block_on(async move { client.truncate(&p2, sz).await });
-            if let Err(e) = r { return reply.error(errno(&e)); }
+            let r = self
+                .rt
+                .block_on(async move { client.truncate(&p2, sz).await });
+            if let Err(e) = r {
+                return reply.error(errno(&e));
+            }
         }
         let client = self.client.clone();
         let p2 = p.clone();
@@ -249,18 +307,38 @@ impl Filesystem for TokimoFuse {
     }
 
     fn opendir(&mut self, _req: &Request<'_>, ino: u64, _flags: i32, reply: ReplyOpen) {
-        let p = match self.path_for(ino) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(ino) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let fh = self.alloc_fh(p);
         reply.opened(fh, 0);
     }
 
-    fn releasedir(&mut self, _req: &Request<'_>, _ino: u64, fh: u64, _flags: i32, reply: ReplyEmpty) {
+    fn releasedir(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        fh: u64,
+        _flags: i32,
+        reply: ReplyEmpty,
+    ) {
         self.fhs.remove(&fh);
         reply.ok();
     }
 
-    fn readdir(&mut self, _req: &Request<'_>, ino: u64, _fh: u64, offset: i64, mut reply: ReplyDirectory) {
-        let p = match self.path_for(ino) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+    fn readdir(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        _fh: u64,
+        offset: i64,
+        mut reply: ReplyDirectory,
+    ) {
+        let p = match self.path_for(ino) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let client = self.client.clone();
         let p2 = p.clone();
         let entries = match self.rt.block_on(async move { client.list(&p2).await }) {
@@ -288,9 +366,13 @@ impl Filesystem for TokimoFuse {
                 c.push(&name);
                 c
             };
-            let ino = if name == "." { ino }
-                else if name == ".." { 1 }
-                else { self.intern(child_path) };
+            let ino = if name == "." {
+                ino
+            } else if name == ".." {
+                1
+            } else {
+                self.intern(child_path)
+            };
             if reply.add(ino, (i + 1) as i64, kind, name) {
                 break;
             }
@@ -299,45 +381,101 @@ impl Filesystem for TokimoFuse {
     }
 
     fn open(&mut self, _req: &Request<'_>, ino: u64, _flags: i32, reply: ReplyOpen) {
-        let p = match self.path_for(ino) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(ino) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let fh = self.alloc_fh(p);
         reply.opened(fh, 0);
     }
 
-    fn release(&mut self, _req: &Request<'_>, _ino: u64, fh: u64, _flags: i32,
-        _lock: Option<u64>, _flush: bool, reply: ReplyEmpty) {
+    fn release(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        fh: u64,
+        _flags: i32,
+        _lock: Option<u64>,
+        _flush: bool,
+        reply: ReplyEmpty,
+    ) {
         self.fhs.remove(&fh);
         reply.ok();
     }
 
-    fn read(&mut self, _req: &Request<'_>, _ino: u64, fh: u64, offset: i64, size: u32,
-        _flags: i32, _lock: Option<u64>, reply: ReplyData) {
-        let p = match self.fhs.get(&fh) { Some(p) => p.clone(), None => return reply.error(libc::EBADF) };
+    fn read(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        fh: u64,
+        offset: i64,
+        size: u32,
+        _flags: i32,
+        _lock: Option<u64>,
+        reply: ReplyData,
+    ) {
+        let p = match self.fhs.get(&fh) {
+            Some(p) => p.clone(),
+            None => return reply.error(libc::EBADF),
+        };
         let client = self.client.clone();
-        match self.rt.block_on(async move { client.read(&p, offset.max(0) as u64, size).await }) {
+        match self
+            .rt
+            .block_on(async move { client.read(&p, offset.max(0) as u64, size).await })
+        {
             Ok(d) => reply.data(&d),
             Err(e) => reply.error(errno(&e)),
         }
     }
 
-    fn write(&mut self, _req: &Request<'_>, _ino: u64, fh: u64, offset: i64, data: &[u8],
-        _write_flags: u32, _flags: i32, _lock: Option<u64>, reply: ReplyWrite) {
-        let p = match self.fhs.get(&fh) { Some(p) => p.clone(), None => return reply.error(libc::EBADF) };
+    fn write(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        fh: u64,
+        offset: i64,
+        data: &[u8],
+        _write_flags: u32,
+        _flags: i32,
+        _lock: Option<u64>,
+        reply: ReplyWrite,
+    ) {
+        let p = match self.fhs.get(&fh) {
+            Some(p) => p.clone(),
+            None => return reply.error(libc::EBADF),
+        };
         let data = data.to_vec();
         let client = self.client.clone();
-        match self.rt.block_on(async move { client.write(&p, offset.max(0) as u64, &data).await }) {
+        match self
+            .rt
+            .block_on(async move { client.write(&p, offset.max(0) as u64, &data).await })
+        {
             Ok(n) => reply.written(n),
             Err(e) => reply.error(errno(&e)),
         }
     }
 
-    fn create(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, mode: u32,
-        _umask: u32, _flags: i32, reply: ReplyCreate) {
-        let p = match self.path_for(parent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+    fn create(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        _umask: u32,
+        _flags: i32,
+        reply: ReplyCreate,
+    ) {
+        let p = match self.path_for(parent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let path = join(&p, name);
         let client = self.client.clone();
         let path2 = path.clone();
-        match self.rt.block_on(async move { client.create(&path2, mode).await }) {
+        match self
+            .rt
+            .block_on(async move { client.create(&path2, mode).await })
+        {
             Ok(a) => {
                 let ino = self.intern(path.clone());
                 let attr = self.to_fuse_attr(ino, &a);
@@ -348,13 +486,26 @@ impl Filesystem for TokimoFuse {
         }
     }
 
-    fn mkdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, mode: u32,
-        _umask: u32, reply: ReplyEntry) {
-        let p = match self.path_for(parent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+    fn mkdir(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        _umask: u32,
+        reply: ReplyEntry,
+    ) {
+        let p = match self.path_for(parent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let path = join(&p, name);
         let client = self.client.clone();
         let path2 = path.clone();
-        match self.rt.block_on(async move { client.mkdir(&path2, mode).await }) {
+        match self
+            .rt
+            .block_on(async move { client.mkdir(&path2, mode).await })
+        {
             Ok(a) => {
                 let ino = self.intern(path);
                 let attr = self.to_fuse_attr(ino, &a);
@@ -365,7 +516,10 @@ impl Filesystem for TokimoFuse {
     }
 
     fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
-        let p = match self.path_for(parent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(parent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let path = join(&p, name);
         let client = self.client.clone();
         match self.rt.block_on(async move { client.remove(&path).await }) {
@@ -375,7 +529,10 @@ impl Filesystem for TokimoFuse {
     }
 
     fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
-        let p = match self.path_for(parent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+        let p = match self.path_for(parent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let path = join(&p, name);
         let client = self.client.clone();
         match self.rt.block_on(async move { client.rmdir(&path).await }) {
@@ -384,14 +541,31 @@ impl Filesystem for TokimoFuse {
         }
     }
 
-    fn rename(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, newparent: u64,
-        newname: &OsStr, _flags: u32, reply: ReplyEmpty) {
-        let p = match self.path_for(parent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
-        let np = match self.path_for(newparent) { Some(p) => p, None => return reply.error(libc::ENOENT) };
+    fn rename(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        newparent: u64,
+        newname: &OsStr,
+        _flags: u32,
+        reply: ReplyEmpty,
+    ) {
+        let p = match self.path_for(parent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
+        let np = match self.path_for(newparent) {
+            Some(p) => p,
+            None => return reply.error(libc::ENOENT),
+        };
         let from = join(&p, name);
         let to = join(&np, newname);
         let client = self.client.clone();
-        match self.rt.block_on(async move { client.rename(&from, &to).await }) {
+        match self
+            .rt
+            .block_on(async move { client.rename(&from, &to).await })
+        {
             Ok(()) => reply.ok(),
             Err(e) => reply.error(errno(&e)),
         }

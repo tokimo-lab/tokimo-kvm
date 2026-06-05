@@ -9,8 +9,7 @@ where
     T: Serialize,
 {
     let bytes = postcard::to_stdvec(msg)?;
-    let len = u32::try_from(bytes.len())
-        .map_err(|_| anyhow::anyhow!("frame too large"))?;
+    let len = u32::try_from(bytes.len()).map_err(|_| anyhow::anyhow!("frame too large"))?;
     w.write_all(&len.to_be_bytes()).await?;
     w.write_all(&bytes).await?;
     w.flush().await?;

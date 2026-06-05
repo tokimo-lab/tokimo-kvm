@@ -38,14 +38,22 @@ pub struct QemuSpec<'a> {
 pub fn build_command(spec: &QemuSpec) -> Command {
     let mut cmd = Command::new(spec.qemu_bin);
     cmd.arg("-enable-kvm")
-        .arg("-machine").arg("q35,accel=kvm")
-        .arg("-cpu").arg("host")
-        .arg("-smp").arg(spec.vcpus.to_string())
-        .arg("-m").arg(format!("{}M", spec.memory_mib))
-        .arg("-kernel").arg(spec.kernel)
-        .arg("-initrd").arg(spec.initrd)
-        .arg("-append").arg(spec.cmdline)
-        .arg("-display").arg("none")
+        .arg("-machine")
+        .arg("q35,accel=kvm")
+        .arg("-cpu")
+        .arg("host")
+        .arg("-smp")
+        .arg(spec.vcpus.to_string())
+        .arg("-m")
+        .arg(format!("{}M", spec.memory_mib))
+        .arg("-kernel")
+        .arg(spec.kernel)
+        .arg("-initrd")
+        .arg(spec.initrd)
+        .arg("-append")
+        .arg(spec.cmdline)
+        .arg("-display")
+        .arg("none")
         .arg("-nodefaults")
         .arg("-no-reboot");
 
@@ -53,17 +61,27 @@ pub fn build_command(spec: &QemuSpec) -> Command {
     // append-only log file (batch / default).
     if let Some(sp) = spec.serial_socket {
         cmd.arg("-chardev").arg(format!(
-            "socket,id=sercon,path={},server=on,wait=off", sp.display()));
+            "socket,id=sercon,path={},server=on,wait=off",
+            sp.display()
+        ));
     } else {
         cmd.arg("-chardev").arg(format!(
-            "file,id=sercon,path={},append=on", spec.serial_log.display()));
+            "file,id=sercon,path={},append=on",
+            spec.serial_log.display()
+        ));
     }
     cmd.arg("-serial").arg("chardev:sercon");
 
     // QMP control socket (unix).
-    cmd.arg("-qmp").arg(format!("unix:{},server=on,wait=off", spec.qmp_socket.display()));
+    cmd.arg("-qmp").arg(format!(
+        "unix:{},server=on,wait=off",
+        spec.qmp_socket.display()
+    ));
     // Human monitor over a unix socket too; convenient for debug tooling.
-    cmd.arg("-monitor").arg(format!("unix:{},server=on,wait=off", spec.monitor_socket.display()));
+    cmd.arg("-monitor").arg(format!(
+        "unix:{},server=on,wait=off",
+        spec.monitor_socket.display()
+    ));
 
     // Rootfs (squashfs via virtio-blk).
     if let Some(rootfs) = spec.rootfs {
@@ -71,7 +89,8 @@ pub fn build_command(spec: &QemuSpec) -> Command {
             "file={},if=none,readonly=on,id=rootfs,format=raw",
             rootfs.display()
         ));
-        cmd.arg("-device").arg("virtio-blk-pci,drive=rootfs,bootindex=1");
+        cmd.arg("-device")
+            .arg("virtio-blk-pci,drive=rootfs,bootindex=1");
     }
 
     // virtio-serial bus + one virtserialport per mount (both HostDir and Vfs).
@@ -80,11 +99,13 @@ pub fn build_command(spec: &QemuSpec) -> Command {
         for p in spec.serial_ports {
             cmd.arg("-chardev").arg(format!(
                 "socket,id={id},path={path},server=off,reconnect=1",
-                id = p.chardev_id, path = p.socket_path.display()
+                id = p.chardev_id,
+                path = p.socket_path.display()
             ));
             cmd.arg("-device").arg(format!(
                 "virtserialport,chardev={id},bus=vser0.0,name={name}",
-                id = p.chardev_id, name = p.port_name
+                id = p.chardev_id,
+                name = p.port_name
             ));
         }
     }
@@ -93,9 +114,16 @@ pub fn build_command(spec: &QemuSpec) -> Command {
     if spec.network.user_mode {
         let mut netdev = String::from("user,id=net0");
         for pf in &spec.network.port_forwards {
-            let proto = match pf.protocol { Protocol::Tcp => "tcp", Protocol::Udp => "udp" };
-            netdev.push_str(&format!(",hostfwd={}::{host}-:{guest}",
-                proto, host = pf.host_port, guest = pf.guest_port));
+            let proto = match pf.protocol {
+                Protocol::Tcp => "tcp",
+                Protocol::Udp => "udp",
+            };
+            netdev.push_str(&format!(
+                ",hostfwd={}::{host}-:{guest}",
+                proto,
+                host = pf.host_port,
+                guest = pf.guest_port
+            ));
         }
         cmd.arg("-netdev").arg(netdev);
         cmd.arg("-device").arg("virtio-net-pci,netdev=net0");
@@ -104,7 +132,9 @@ pub fn build_command(spec: &QemuSpec) -> Command {
     cmd.current_dir(spec.runtime_dir);
     // Pipe stderr into a file so boot-time QEMU errors are debuggable.
     if let Ok(f) = std::fs::OpenOptions::new()
-        .create(true).append(true).open(spec.runtime_dir.join("qemu.stderr.log"))
+        .create(true)
+        .append(true)
+        .open(spec.runtime_dir.join("qemu.stderr.log"))
     {
         cmd.stderr(Stdio::from(f));
     } else {

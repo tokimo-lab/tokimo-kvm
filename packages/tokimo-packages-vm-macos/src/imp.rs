@@ -16,16 +16,13 @@ use objc2_foundation::{NSArray, NSError, NSFileHandle, NSString, NSURL};
 use objc2_virtualization::{
     VZConsoleDeviceConfiguration, VZConsolePortConfiguration,
     VZDirectorySharingDeviceConfiguration, VZDiskImageStorageDeviceAttachment,
-    VZEntropyDeviceConfiguration, VZFileHandleSerialPortAttachment,
-    VZGenericPlatformConfiguration, VZLinuxBootLoader, VZNATNetworkDeviceAttachment,
-    VZNetworkDeviceAttachment, VZNetworkDeviceConfiguration, VZPlatformConfiguration,
-    VZSerialPortConfiguration,
-    VZStorageDeviceConfiguration,
-    VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceConfiguration,
-    VZVirtioConsoleDeviceSerialPortConfiguration, VZVirtioConsolePortConfiguration,
-    VZVirtioEntropyDeviceConfiguration,
-    VZVirtioNetworkDeviceConfiguration,
-    VZVirtualMachine, VZVirtualMachineConfiguration,
+    VZEntropyDeviceConfiguration, VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
+    VZLinuxBootLoader, VZNATNetworkDeviceAttachment, VZNetworkDeviceAttachment,
+    VZNetworkDeviceConfiguration, VZPlatformConfiguration, VZSerialPortConfiguration,
+    VZStorageDeviceConfiguration, VZVirtioBlockDeviceConfiguration,
+    VZVirtioConsoleDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
+    VZVirtioConsolePortConfiguration, VZVirtioEntropyDeviceConfiguration,
+    VZVirtioNetworkDeviceConfiguration, VZVirtualMachine, VZVirtualMachineConfiguration,
 };
 use std::os::fd::{FromRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::path::PathBuf;
@@ -35,9 +32,7 @@ use tokio::net::UnixStream;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use tokimo_packages_vm_core::{
-    Error, ImagePaths, MountSpec, Result, SandboxConfig, TokimoVfs,
-};
+use tokimo_packages_vm_core::{Error, ImagePaths, MountSpec, Result, SandboxConfig, TokimoVfs};
 use tokimo_packages_vm_rpc as rpc;
 
 use crate::runtime;
@@ -54,9 +49,6 @@ pub(crate) struct Inner {
     _rpc_tasks: Vec<JoinHandle<()>>,
 }
 
-
-
-
 /// One virtio-console port backed by a socket-pair FD handed to VZ.
 struct ConsolePort {
     name: String,
@@ -65,10 +57,15 @@ struct ConsolePort {
 
 impl Inner {
     pub(crate) async fn start(cfg: &SandboxConfig) -> Result<(Self, PathBuf)> {
-        let image = cfg.image.clone().or_else(ImagePaths::from_env_or_default)
+        let image = cfg
+            .image
+            .clone()
+            .or_else(ImagePaths::from_env_or_default)
             .ok_or_else(|| Error::Config("no image (set TOKIMO_IMG_DIR or build img/)".into()))?;
 
-        let root = cfg.runtime_dir.clone()
+        let root = cfg
+            .runtime_dir
+            .clone()
             .unwrap_or_else(|| runtime::default_runtime_root(&cfg.name));
         let rt = runtime::Runtime::new(root).map_err(Error::Io)?;
         let serial_log = rt.serial_log.clone();
@@ -84,14 +81,19 @@ impl Inner {
             // HostDir and Vfs flow through the same virtio-console RPC
             // pipeline — no VZSingleDirectoryShare / 9p.
             let vfs: Arc<dyn TokimoVfs> = match m {
-                MountSpec::HostDir { host_path, read_only, .. } => {
-                    Arc::new(tokimo_packages_vm_core::HostFs::new(
-                        host_path.clone(), *read_only))
-                }
+                MountSpec::HostDir {
+                    host_path,
+                    read_only,
+                    ..
+                } => Arc::new(tokimo_packages_vm_core::HostFs::new(
+                    host_path.clone(),
+                    *read_only,
+                )),
                 MountSpec::Vfs { vfs, .. } => vfs.clone(),
             };
             let (host_fd, guest_fd) = socket_pair()?;
-            let host_stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(host_fd.into_raw_fd()) };
+            let host_stream =
+                unsafe { std::os::unix::net::UnixStream::from_raw_fd(host_fd.into_raw_fd()) };
             host_stream.set_nonblocking(true).map_err(Error::Io)?;
             let host_tokio = UnixStream::from_std(host_stream).map_err(Error::Io)?;
             rpc_tasks.push(tokio::spawn(async move {
@@ -107,8 +109,11 @@ impl Inner {
         let cmdline = build_cmdline(&cfg.extra_cmdline, &cmd_mounts, image.rootfs.is_some());
 
         let serial_fd: RawFd = std::fs::OpenOptions::new()
-            .write(true).append(true).open(&serial_log)
-            .map_err(Error::Io)?.into_raw_fd();
+            .write(true)
+            .append(true)
+            .open(&serial_log)
+            .map_err(Error::Io)?
+            .into_raw_fd();
 
         let vcpus = cfg.vcpus;
         let memory_bytes: u64 = (cfg.memory_mib as u64) * 1024 * 1024;
@@ -124,23 +129,45 @@ impl Inner {
             .name(format!("tokimo-macos-vm-{}", cfg.name))
             .spawn(move || {
                 vm_thread_main(VmThreadArgs {
-                    kernel, initrd, rootfs, cmdline,
-                    vcpus, memory_bytes, serial_fd, use_nat, ports,
-                    cmd_rx: rx, start_tx,
+                    kernel,
+                    initrd,
+                    rootfs,
+                    cmdline,
+                    vcpus,
+                    memory_bytes,
+                    serial_fd,
+                    use_nat,
+                    ports,
+                    cmd_rx: rx,
+                    start_tx,
                 });
             })
             .map_err(Error::Io)?;
 
         match start_rx.await {
-            Ok(Ok(())) => Ok((Self { tx, thread: Some(handle), _rpc_tasks: rpc_tasks }, serial_log)),
-            Ok(Err(e)) => { let _ = handle.join(); Err(e) }
-            Err(_) => Err(Error::Hypervisor("VM thread exited before start result".into())),
+            Ok(Ok(())) => Ok((
+                Self {
+                    tx,
+                    thread: Some(handle),
+                    _rpc_tasks: rpc_tasks,
+                },
+                serial_log,
+            )),
+            Ok(Err(e)) => {
+                let _ = handle.join();
+                Err(e)
+            }
+            Err(_) => Err(Error::Hypervisor(
+                "VM thread exited before start result".into(),
+            )),
         }
     }
 
     pub(crate) async fn stop(mut self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        if self.tx.send(Cmd::Stop(tx)).is_err() { return Ok(()); }
+        if self.tx.send(Cmd::Stop(tx)).is_err() {
+            return Ok(());
+        }
         let res = rx.await.unwrap_or_else(|_| Ok(()));
         let _ = self.tx.send(Cmd::Shutdown);
         if let Some(h) = self.thread.take() {
@@ -151,32 +178,32 @@ impl Inner {
 
     pub(crate) async fn wait(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        if self.tx.send(Cmd::Wait(tx)).is_err() { return Ok(()); }
+        if self.tx.send(Cmd::Wait(tx)).is_err() {
+            return Ok(());
+        }
         rx.await.unwrap_or_else(|_| Ok(()))
     }
 }
 
 fn socket_pair() -> Result<(OwnedFd, OwnedFd)> {
     let mut fds: [libc::c_int; 2] = [0; 2];
-    let r = unsafe {
-        libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr())
-    };
-    if r < 0 { return Err(Error::Io(std::io::Error::last_os_error())); }
+    let r = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
+    if r < 0 {
+        return Err(Error::Io(std::io::Error::last_os_error()));
+    }
     Ok(unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) })
 }
 
 impl Drop for Inner {
     fn drop(&mut self) {
         let _ = self.tx.send(Cmd::Shutdown);
-        if let Some(h) = self.thread.take() { let _ = h.join(); }
+        if let Some(h) = self.thread.take() {
+            let _ = h.join();
+        }
     }
 }
 
-fn build_cmdline(
-    extra: &[String],
-    mounts: &[(String, String)],
-    has_rootfs: bool,
-) -> String {
+fn build_cmdline(extra: &[String], mounts: &[(String, String)], has_rootfs: bool) -> String {
     let mut parts: Vec<String> = vec![
         "console=hvc0".into(),
         "panic=-1".into(),
@@ -189,13 +216,15 @@ fn build_cmdline(
         parts.push("ro".into());
     }
     if !mounts.is_empty() {
-        let s = mounts.iter()
+        let s = mounts
+            .iter()
             .map(|(t, gp)| format!("{t}:{gp}"))
-            .collect::<Vec<_>>().join(",");
+            .collect::<Vec<_>>()
+            .join(",");
         parts.push(format!("tokimo.mounts={s}"));
     }
-    let (script, rest): (Vec<&String>, Vec<&String>) = extra.iter()
-        .partition(|s| s.starts_with("tokimo.script="));
+    let (script, rest): (Vec<&String>, Vec<&String>) =
+        extra.iter().partition(|s| s.starts_with("tokimo.script="));
     parts.extend(rest.into_iter().cloned());
     parts.extend(script.into_iter().cloned());
     parts.join(" ")
@@ -217,16 +246,38 @@ struct VmThreadArgs {
 
 fn vm_thread_main(args: VmThreadArgs) {
     let VmThreadArgs {
-        kernel, initrd, rootfs, cmdline, vcpus, memory_bytes,
-        serial_fd, use_nat, ports, cmd_rx, start_tx,
+        kernel,
+        initrd,
+        rootfs,
+        cmdline,
+        vcpus,
+        memory_bytes,
+        serial_fd,
+        use_nat,
+        ports,
+        cmd_rx,
+        start_tx,
     } = args;
 
     let vm = match build_and_start_vm(
-        &kernel, &initrd, rootfs.as_deref(), &cmdline, vcpus, memory_bytes,
-        serial_fd, use_nat, &ports,
+        &kernel,
+        &initrd,
+        rootfs.as_deref(),
+        &cmdline,
+        vcpus,
+        memory_bytes,
+        serial_fd,
+        use_nat,
+        &ports,
     ) {
-        Ok(v) => { let _ = start_tx.send(Ok(())); v }
-        Err(e) => { let _ = start_tx.send(Err(e)); return; }
+        Ok(v) => {
+            let _ = start_tx.send(Ok(()));
+            v
+        }
+        Err(e) => {
+            let _ = start_tx.send(Err(e));
+            return;
+        }
     };
 
     let mut stopped = false;
@@ -234,18 +285,33 @@ fn vm_thread_main(args: VmThreadArgs) {
     while let Ok(cmd) = cmd_rx.recv() {
         match cmd {
             Cmd::Stop(r) => {
-                if stopped { let _ = r.send(Ok(())); continue; }
+                if stopped {
+                    let _ = r.send(Ok(()));
+                    continue;
+                }
                 let res = request_stop_blocking(&vm);
                 stopped = res.is_ok();
-                if stopped { for w in waiters.drain(..) { let _ = w.send(Ok(())); } }
+                if stopped {
+                    for w in waiters.drain(..) {
+                        let _ = w.send(Ok(()));
+                    }
+                }
                 let _ = r.send(res);
             }
             Cmd::Wait(r) => {
-                if stopped { let _ = r.send(Ok(())); } else { waiters.push(r); }
+                if stopped {
+                    let _ = r.send(Ok(()));
+                } else {
+                    waiters.push(r);
+                }
             }
             Cmd::Shutdown => {
-                if !stopped { let _ = request_stop_blocking(&vm); }
-                for w in waiters.drain(..) { let _ = w.send(Ok(())); }
+                if !stopped {
+                    let _ = request_stop_blocking(&vm);
+                }
+                for w in waiters.drain(..) {
+                    let _ = w.send(Ok(()));
+                }
                 break;
             }
         }
@@ -276,9 +342,16 @@ fn build_and_start_vm(
 
         // Primary serial console (boot log).
         let file_handle = NSFileHandle::initWithFileDescriptor_closeOnDealloc(
-            NSFileHandle::alloc(), serial_fd, true);
-        let attachment = VZFileHandleSerialPortAttachment::initWithFileHandleForReading_fileHandleForWriting(
-            VZFileHandleSerialPortAttachment::alloc(), None, Some(&file_handle));
+            NSFileHandle::alloc(),
+            serial_fd,
+            true,
+        );
+        let attachment =
+            VZFileHandleSerialPortAttachment::initWithFileHandleForReading_fileHandleForWriting(
+                VZFileHandleSerialPortAttachment::alloc(),
+                None,
+                Some(&file_handle),
+            );
         let serial_cfg: Retained<VZVirtioConsoleDeviceSerialPortConfiguration> =
             VZVirtioConsoleDeviceSerialPortConfiguration::new();
         {
@@ -301,7 +374,10 @@ fn build_and_start_vm(
             let port_array = console_dev.ports();
             for (i, p) in ports.iter().enumerate() {
                 let guest_fh = NSFileHandle::initWithFileDescriptor_closeOnDealloc(
-                    NSFileHandle::alloc(), p.guest_fd, true);
+                    NSFileHandle::alloc(),
+                    p.guest_fd,
+                    true,
+                );
                 let attach = VZFileHandleSerialPortAttachment::initWithFileHandleForReading_fileHandleForWriting(
                     VZFileHandleSerialPortAttachment::alloc(),
                     Some(&guest_fh), Some(&guest_fh));
@@ -345,11 +421,15 @@ fn build_and_start_vm(
             let rootfs_url = path_to_nsurl(rootfs_path)
                 .ok_or_else(|| Error::Config(format!("rootfs: {}", rootfs_path.display())))?;
             let attach = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
-                VZDiskImageStorageDeviceAttachment::alloc(), &rootfs_url, true)
-                .map_err(|e| Error::Hypervisor(format!("rootfs attach: {}", ns_error_to_string(&e))))?;
+                VZDiskImageStorageDeviceAttachment::alloc(),
+                &rootfs_url,
+                true,
+            )
+            .map_err(|e| Error::Hypervisor(format!("rootfs attach: {}", ns_error_to_string(&e))))?;
             let blk = VZVirtioBlockDeviceConfiguration::initWithAttachment(
                 VZVirtioBlockDeviceConfiguration::alloc(),
-                &Retained::into_super(attach));
+                &Retained::into_super(attach),
+            );
             let arr: Retained<NSArray<VZStorageDeviceConfiguration>> =
                 NSArray::from_retained_slice(&[Retained::into_super(blk)]);
             config.setStorageDevices(&arr);
@@ -366,18 +446,25 @@ fn build_and_start_vm(
             config.setNetworkDevices(&arr);
         }
 
-        config.validateWithError()
+        config
+            .validateWithError()
             .map_err(|e| Error::Config(format!("VZ config invalid: {}", ns_error_to_string(&e))))?;
 
         let queue = DispatchQueue::new("io.tokimo.vm", DispatchQueueAttr::SERIAL);
         let vm = VZVirtualMachine::initWithConfiguration_queue(
-            VZVirtualMachine::alloc(), &config, &queue);
+            VZVirtualMachine::alloc(),
+            &config,
+            &queue,
+        );
 
         let (s_tx, s_rx) = mpsc::sync_channel::<std::result::Result<(), String>>(1);
         let s_tx_block = s_tx.clone();
         let block = RcBlock::new(move |err: *mut NSError| {
-            let res = if err.is_null() { Ok(()) }
-                else { Err(ns_error_to_string(&*err)) };
+            let res = if err.is_null() {
+                Ok(())
+            } else {
+                Err(ns_error_to_string(&*err))
+            };
             let _ = s_tx_block.send(res);
         });
         vm.startWithCompletionHandler(&block);
@@ -399,7 +486,11 @@ fn request_stop_blocking(vm: &Retained<VZVirtualMachine>) -> Result<()> {
         let (tx, rx) = mpsc::sync_channel::<std::result::Result<(), String>>(1);
         let tx_block = tx.clone();
         let block = RcBlock::new(move |err: *mut NSError| {
-            let res = if err.is_null() { Ok(()) } else { Err(ns_error_to_string(&*err)) };
+            let res = if err.is_null() {
+                Ok(())
+            } else {
+                Err(ns_error_to_string(&*err))
+            };
             let _ = tx_block.send(res);
         });
         vm.stopWithCompletionHandler(&block);

@@ -64,11 +64,17 @@ impl QemuSandbox {
         }
     }
 
-    pub fn qemu_bin(mut self, p: impl Into<PathBuf>) -> Self { self.qemu_bin = p.into(); self }
+    pub fn qemu_bin(mut self, p: impl Into<PathBuf>) -> Self {
+        self.qemu_bin = p.into();
+        self
+    }
 
     fn ensure_runtime(&mut self) -> Result<&runtime::Runtime> {
         if self.runtime.is_none() {
-            let root = self.config.runtime_dir.clone()
+            let root = self
+                .config
+                .runtime_dir
+                .clone()
                 .unwrap_or_else(|| runtime::default_runtime_root(&self.config.name));
             self.runtime = Some(runtime::Runtime::new(root)?);
         }
@@ -80,11 +86,7 @@ impl QemuSandbox {
 ///
 /// Mounts are encoded as `tokimo.mounts=kind:tag:path,...`. `kind` is
 /// either `9p` (HostDir) or `vfs` (virtio-serial RPC).
-fn build_cmdline(
-    extra: &[String],
-    mounts: &[(String, String)],
-    has_rootfs: bool,
-) -> String {
+fn build_cmdline(extra: &[String], mounts: &[(String, String)], has_rootfs: bool) -> String {
     let mut parts: Vec<String> = vec![
         "console=ttyS0".into(),
         "panic=-1".into(),
@@ -99,7 +101,8 @@ fn build_cmdline(
     if !mounts.is_empty() {
         // Format: `tag:guest_path` (comma-separated). All mounts use the
         // same virtio-serial/FUSE transport in the guest.
-        let s = mounts.iter()
+        let s = mounts
+            .iter()
             .map(|(tag, gp)| format!("{tag}:{gp}"))
             .collect::<Vec<_>>()
             .join(",");
@@ -107,8 +110,8 @@ fn build_cmdline(
     }
     // tokimo.script=... must come LAST so the guest parser can read
     // everything after the `=` to end-of-line.
-    let (script, rest): (Vec<&String>, Vec<&String>) = extra.iter()
-        .partition(|s| s.starts_with("tokimo.script="));
+    let (script, rest): (Vec<&String>, Vec<&String>) =
+        extra.iter().partition(|s| s.starts_with("tokimo.script="));
     parts.extend(rest.into_iter().cloned());
     parts.extend(script.into_iter().cloned());
     parts.join(" ")
@@ -116,20 +119,34 @@ fn build_cmdline(
 
 #[async_trait]
 impl Sandbox for QemuSandbox {
-    fn id(&self) -> SandboxId { self.id }
-    fn state(&self) -> SandboxState { self.state }
-    fn config(&self) -> &SandboxConfig { &self.config }
+    fn id(&self) -> SandboxId {
+        self.id
+    }
+    fn state(&self) -> SandboxState {
+        self.state
+    }
+    fn config(&self) -> &SandboxConfig {
+        &self.config
+    }
 
     async fn start(&mut self) -> Result<()> {
-        if self.state != SandboxState::Created { return Err(Error::AlreadyStarted); }
+        if self.state != SandboxState::Created {
+            return Err(Error::AlreadyStarted);
+        }
         self.state = SandboxState::Starting;
 
         self.ensure_runtime()?;
 
-        let image = self.config.image.clone()
+        let image = self
+            .config
+            .image
+            .clone()
             .or_else(ImagePaths::from_env_or_default)
-            .ok_or_else(|| Error::Config(
-                "no image configured; run scripts/image/build.sh or set TOKIMO_IMG_DIR".into()))?;
+            .ok_or_else(|| {
+                Error::Config(
+                    "no image configured; run scripts/image/build.sh or set TOKIMO_IMG_DIR".into(),
+                )
+            })?;
 
         let specs: Vec<MountSpec> = self.config.mounts.clone();
         let mut serial_ports: Vec<qemu::SerialPort> = Vec::new();
@@ -150,16 +167,17 @@ impl Sandbox for QemuSandbox {
             // internal `HostFs` adapter so there is a single code path
             // in the guest (FUSE proxy), no 9p/virtiofs dependency.
             let vfs: Arc<dyn TokimoVfs> = match m {
-                MountSpec::HostDir { host_path, read_only, .. } => {
-                    Arc::new(HostFs::new(host_path.clone(), *read_only))
-                }
+                MountSpec::HostDir {
+                    host_path,
+                    read_only,
+                    ..
+                } => Arc::new(HostFs::new(host_path.clone(), *read_only)),
                 MountSpec::Vfs { vfs, .. } => vfs.clone(),
             };
             let sock_path = runtime_root.join(format!("rpc{i}.sock"));
             let _ = std::fs::remove_file(&sock_path);
-            let listener = UnixListener::bind(&sock_path).map_err(|e| {
-                Error::Hypervisor(format!("rpc bind {}: {e}", sock_path.display()))
-            })?;
+            let listener = UnixListener::bind(&sock_path)
+                .map_err(|e| Error::Hypervisor(format!("rpc bind {}: {e}", sock_path.display())))?;
             let sp = sock_path.clone();
             let task = tokio::spawn(async move {
                 loop {
@@ -205,7 +223,9 @@ impl Sandbox for QemuSandbox {
         let rt = self.runtime.as_ref().unwrap();
         let serial_socket = if self.config.interactive_serial {
             Some(rt.serial_sock.as_path())
-        } else { None };
+        } else {
+            None
+        };
         let spec = qemu::QemuSpec {
             qemu_bin: &self.qemu_bin,
             vcpus: self.config.vcpus,
@@ -223,11 +243,13 @@ impl Sandbox for QemuSandbox {
             runtime_dir: &rt.root,
         };
         let cmd = qemu::build_command(&spec);
-        let child = qemu::spawn(cmd).await
+        let child = qemu::spawn(cmd)
+            .await
             .map_err(|e| Error::Hypervisor(format!("qemu spawn: {e}")))?;
         self.qemu_child = Some(child);
 
-        let qmp = qmp::QmpClient::connect(&rt.qmp_sock).await
+        let qmp = qmp::QmpClient::connect(&rt.qmp_sock)
+            .await
             .map_err(|e| Error::Hypervisor(format!("qmp connect: {e}")))?;
         self.qmp = Some(qmp);
 
@@ -255,7 +277,12 @@ impl Sandbox for QemuSandbox {
             s.task.abort();
             let _ = s.task.await;
             let _ = std::fs::remove_file(&s.socket_path);
-            tracing::debug!("cleaned rpc socket {:?} (tag={} -> {})", s.socket_path, s.tag, s.guest_path);
+            tracing::debug!(
+                "cleaned rpc socket {:?} (tag={} -> {})",
+                s.socket_path,
+                s.tag,
+                s.guest_path
+            );
         }
         self.state = SandboxState::Stopped;
         Ok(())
@@ -283,13 +310,17 @@ impl Sandbox for QemuSandbox {
     fn serial_socket_path(&self) -> Option<PathBuf> {
         if self.config.interactive_serial {
             self.runtime.as_ref().map(|r| r.serial_sock.clone())
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
 impl Drop for QemuSandbox {
     fn drop(&mut self) {
-        if let Some(mut c) = self.qemu_child.take() { let _ = c.start_kill(); }
+        if let Some(mut c) = self.qemu_child.take() {
+            let _ = c.start_kill();
+        }
         for s in self.vfs_servers.lock().drain(..) {
             s.task.abort();
             let _ = std::fs::remove_file(&s.socket_path);

@@ -8,11 +8,11 @@
 //! `AsyncRead + AsyncWrite` half-duplex pair, so the protocol code is
 //! transport-agnostic.
 
-pub mod proto;
-pub mod frame;
-pub mod server;
 pub mod client;
+pub mod frame;
+pub mod proto;
+pub mod server;
 
-pub use proto::{Request, Response, PROTOCOL_VERSION};
 pub use client::Client;
+pub use proto::{Request, Response, PROTOCOL_VERSION};
 pub use server::serve_stream;

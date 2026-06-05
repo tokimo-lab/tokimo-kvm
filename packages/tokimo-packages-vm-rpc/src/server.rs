@@ -7,8 +7,8 @@
 use crate::frame::{read_frame, write_frame};
 use crate::proto::{Request, Response, PROTOCOL_VERSION};
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokimo_packages_vm_core::TokimoVfs;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Serve exactly one connection to completion.
 pub async fn serve_stream<S>(stream: S, vfs: Arc<dyn TokimoVfs>) -> anyhow::Result<()>
@@ -34,11 +34,15 @@ where
 
 async fn handle(vfs: &dyn TokimoVfs, req: Request) -> Response {
     match req {
-        Request::Hello { .. } => Response::Hello { protocol_version: PROTOCOL_VERSION },
+        Request::Hello { .. } => Response::Hello {
+            protocol_version: PROTOCOL_VERSION,
+        },
         Request::Stat { path } => Response::Stat(vfs.stat(&path).await),
         Request::List { path } => Response::List(vfs.list(&path).await),
         Request::Read { path, offset, len } => Response::Read(vfs.read(&path, offset, len).await),
-        Request::Write { path, offset, data } => Response::Write(vfs.write(&path, offset, &data).await),
+        Request::Write { path, offset, data } => {
+            Response::Write(vfs.write(&path, offset, &data).await)
+        }
         Request::Create { path, mode } => Response::Create(vfs.create(&path, mode).await),
         Request::Mkdir { path, mode } => Response::Mkdir(vfs.mkdir(&path, mode).await),
         Request::Remove { path } => Response::Remove(vfs.remove(&path).await),

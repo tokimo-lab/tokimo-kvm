@@ -13,13 +13,12 @@ const MAGIC: &str = "NET-OK:";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("tokimo=info".parse()?))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("tokimo=info".parse()?),
+        )
         .init();
 
-    let mut cfg = SandboxConfig::new("network-demo")
-        .vcpus(1)
-        .memory_mib(256);
+    let mut cfg = SandboxConfig::new("network-demo").vcpus(1).memory_mib(256);
 
     // Python script that probes outbound connectivity without needing
     // any extra packages. We try:
@@ -61,7 +60,9 @@ except Exception as e: fail('http '+repr(e))
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(500)).await;
         if let Ok(s) = std::fs::read_to_string(&log) {
-            if s.len() > last_len { last_len = s.len(); }
+            if s.len() > last_len {
+                last_len = s.len();
+            }
             if s.contains("script exit=") {
                 println!("\n===== serial output =====\n{s}\n========================");
                 let ok_count = s.matches(MAGIC).count();
@@ -73,7 +74,9 @@ except Exception as e: fail('http '+repr(e))
         }
     }
     sbx.stop().await?;
-    if !done { anyhow::bail!("guest script did not finish in time"); }
+    if !done {
+        anyhow::bail!("guest script did not finish in time");
+    }
     println!(">>> done");
     Ok(())
 }

@@ -14,11 +14,19 @@ pub use tokimo_packages_vm_wsl as windows;
 
 pub fn new_default(config: SandboxConfig) -> Box<dyn Sandbox> {
     #[cfg(target_os = "linux")]
-    { Box::new(tokimo_packages_vm_linux::QemuSandbox::new(config)) }
+    {
+        Box::new(tokimo_packages_vm_linux::QemuSandbox::new(config))
+    }
     #[cfg(target_os = "macos")]
-    { Box::new(tokimo_packages_vm_macos::MacosSandbox::new(config)) }
+    {
+        Box::new(tokimo_packages_vm_macos::MacosSandbox::new(config))
+    }
     #[cfg(target_os = "windows")]
-    { Box::new(tokimo_packages_vm_wsl::WslSandbox::new(config)) }
+    {
+        Box::new(tokimo_packages_vm_wsl::WslSandbox::new(config))
+    }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    { compile_error!("unsupported target OS"); }
+    {
+        compile_error!("unsupported target OS");
+    }
 }

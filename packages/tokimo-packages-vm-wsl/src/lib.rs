@@ -112,8 +112,10 @@ impl WslSandbox {
         let name = self.resolve_distro_name();
         // `wsl -l -q` lists existing distros; names are UTF-16 on stdout.
         let out = Command::new(&self.wsl.wsl_bin)
-            .arg("--list").arg("--quiet")
-            .output().await
+            .arg("--list")
+            .arg("--quiet")
+            .output()
+            .await
             .map_err(|e| Error::Hypervisor(format!("wsl --list: {e}")))?;
         let listing = decode_wsl_text(&out.stdout);
         if listing.lines().any(|l| l.trim() == name) {
@@ -122,13 +124,20 @@ impl WslSandbox {
         }
 
         // Not imported yet — do the one-time import.
-        let install_dir = self.wsl.install_dir.clone().unwrap_or_else(|| {
-            default_install_dir(&name)
-        });
+        let install_dir = self
+            .wsl
+            .install_dir
+            .clone()
+            .unwrap_or_else(|| default_install_dir(&name));
         std::fs::create_dir_all(&install_dir)
             .map_err(|e| Error::Config(format!("create {install_dir:?}: {e}")))?;
-        let tar = self.wsl.rootfs_tar.clone()
-            .or_else(|| std::env::var_os("TOKIMO_IMG_DIR").map(|d| PathBuf::from(d).join("rootfs.tar")))
+        let tar = self
+            .wsl
+            .rootfs_tar
+            .clone()
+            .or_else(|| {
+                std::env::var_os("TOKIMO_IMG_DIR").map(|d| PathBuf::from(d).join("rootfs.tar"))
+            })
             .unwrap_or_else(|| PathBuf::from("img/rootfs.tar"));
         if !tar.exists() {
             return Err(Error::Config(format!(
@@ -137,11 +146,14 @@ impl WslSandbox {
         }
         tracing::info!("wsl --import {} {:?} {:?}", name, install_dir, tar);
         let st = Command::new(&self.wsl.wsl_bin)
-            .arg("--import").arg(&name)
+            .arg("--import")
+            .arg(&name)
             .arg(&install_dir)
             .arg(&tar)
-            .arg("--version").arg("2")
-            .status().await
+            .arg("--version")
+            .arg("2")
+            .status()
+            .await
             .map_err(|e| Error::Hypervisor(format!("wsl --import: {e}")))?;
         if !st.success() {
             return Err(Error::Hypervisor(format!("wsl --import exited {st}")));
@@ -151,21 +163,37 @@ impl WslSandbox {
     }
 
     fn default_runtime_dir(&self) -> PathBuf {
-        std::env::temp_dir().join(format!("tokimo-{}-{}", self.config.name, std::process::id()))
+        std::env::temp_dir().join(format!(
+            "tokimo-{}-{}",
+            self.config.name,
+            std::process::id()
+        ))
     }
 }
 
 #[async_trait]
 impl Sandbox for WslSandbox {
-    fn id(&self) -> SandboxId { self.id }
-    fn state(&self) -> SandboxState { self.state }
-    fn config(&self) -> &SandboxConfig { &self.config }
+    fn id(&self) -> SandboxId {
+        self.id
+    }
+    fn state(&self) -> SandboxState {
+        self.state
+    }
+    fn config(&self) -> &SandboxConfig {
+        &self.config
+    }
 
     async fn start(&mut self) -> Result<()> {
-        if self.state != SandboxState::Created { return Err(Error::AlreadyStarted); }
+        if self.state != SandboxState::Created {
+            return Err(Error::AlreadyStarted);
+        }
         self.state = SandboxState::Starting;
 
-        let rt_dir = self.config.runtime_dir.clone().unwrap_or_else(|| self.default_runtime_dir());
+        let rt_dir = self
+            .config
+            .runtime_dir
+            .clone()
+            .unwrap_or_else(|| self.default_runtime_dir());
         std::fs::create_dir_all(&rt_dir).map_err(|e| Error::Config(format!("runtime_dir: {e}")))?;
         self.runtime_dir = Some(rt_dir.clone());
 
@@ -176,9 +204,11 @@ impl Sandbox for WslSandbox {
             let tag = m.tag().to_string();
             let guest_path = m.guest_path().to_string();
             let vfs: Arc<dyn TokimoVfs> = match m {
-                MountSpec::HostDir { host_path, read_only, .. } => {
-                    Arc::new(HostFs::new(host_path.clone(), *read_only))
-                }
+                MountSpec::HostDir {
+                    host_path,
+                    read_only,
+                    ..
+                } => Arc::new(HostFs::new(host_path.clone(), *read_only)),
                 MountSpec::Vfs { vfs, .. } => vfs.clone(),
             };
 
@@ -187,22 +217,35 @@ impl Sandbox for WslSandbox {
                 .map_err(|e| Error::Config(format!("agent log: {e}")))?;
 
             let mut cmd = Command::new(&self.wsl.wsl_bin);
-            cmd.arg("-d").arg(&distro)
+            cmd.arg("-d")
+                .arg(&distro)
                 .arg("--exec")
                 .arg("/sbin/tokimo-agent")
                 .arg("--stdio")
-                .arg("--mount").arg(&guest_path)
-                .arg("--tag").arg(&tag)
+                .arg("--mount")
+                .arg(&guest_path)
+                .arg("--tag")
+                .arg(&tag)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::from(log));
-            let mut child = cmd.spawn()
+            let mut child = cmd
+                .spawn()
                 .map_err(|e| Error::Hypervisor(format!("spawn wsl agent #{i}: {e}")))?;
-            let stdin = child.stdin.take().ok_or_else(|| Error::Hypervisor("child stdin".into()))?;
-            let stdout = child.stdout.take().ok_or_else(|| Error::Hypervisor("child stdout".into()))?;
+            let stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| Error::Hypervisor("child stdin".into()))?;
+            let stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| Error::Hypervisor("child stdout".into()))?;
             self.agent_children.lock().push(child);
 
-            let duplex = ChildDuplex { r: stdout, w: stdin };
+            let duplex = ChildDuplex {
+                r: stdout,
+                w: stdin,
+            };
             let vfs_clone = vfs.clone();
             let handle = tokio::spawn(async move {
                 if let Err(e) = rpc::serve_stream(duplex, vfs_clone).await {
@@ -217,7 +260,9 @@ impl Sandbox for WslSandbox {
     }
 
     async fn stop(&mut self) -> Result<()> {
-        if self.state == SandboxState::Stopped { return Ok(()); }
+        if self.state == SandboxState::Stopped {
+            return Ok(());
+        }
         self.state = SandboxState::Stopping;
 
         // Close stdio to agents (triggers EOF) and reap.
@@ -232,31 +277,45 @@ impl Sandbox for WslSandbox {
         // Terminate the distro so next start is clean.
         if let Some(distro) = self.resolved_distro.clone() {
             let _ = Command::new(&self.wsl.wsl_bin)
-                .arg("--terminate").arg(&distro)
-                .status().await;
+                .arg("--terminate")
+                .arg(&distro)
+                .status()
+                .await;
         }
         self.state = SandboxState::Stopped;
         Ok(())
     }
 
     async fn add_mount(&mut self, _s: MountSpec) -> Result<MountId> {
-        Err(Error::Unsupported("hot add_mount not implemented on WSL backend"))
+        Err(Error::Unsupported(
+            "hot add_mount not implemented on WSL backend",
+        ))
     }
     async fn remove_mount(&mut self, _id: MountId) -> Result<()> {
-        Err(Error::Unsupported("hot remove_mount not implemented on WSL backend"))
+        Err(Error::Unsupported(
+            "hot remove_mount not implemented on WSL backend",
+        ))
     }
 
     async fn exec(&self, spec: ExecSpec) -> Result<ExecOutput> {
-        let distro = self.resolved_distro.clone()
+        let distro = self
+            .resolved_distro
+            .clone()
             .ok_or_else(|| Error::Hypervisor("sandbox not started".into()))?;
         let mut cmd = Command::new(&self.wsl.wsl_bin);
         cmd.arg("-d").arg(&distro).arg("--exec").arg(&spec.program);
-        for a in &spec.args { cmd.arg(a); }
+        for a in &spec.args {
+            cmd.arg(a);
+        }
         if let Some(cwd) = &spec.cwd {
             cmd.current_dir(cwd);
         }
-        for (k, v) in &spec.env { cmd.env(k, v); }
-        let out = cmd.output().await
+        for (k, v) in &spec.env {
+            cmd.env(k, v);
+        }
+        let out = cmd
+            .output()
+            .await
             .map_err(|e| Error::Hypervisor(format!("wsl exec: {e}")))?;
         Ok(ExecOutput {
             id: tokimo_packages_vm_core::ExecId::new(),
@@ -290,30 +349,53 @@ struct ChildDuplex {
     w: ChildStdin,
 }
 impl AsyncRead for ChildDuplex {
-    fn poll_read(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &mut ReadBuf<'_>) -> std::task::Poll<std::io::Result<()>> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         std::pin::Pin::new(&mut self.r).poll_read(cx, buf)
     }
 }
 impl AsyncWrite for ChildDuplex {
-    fn poll_write(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, b: &[u8]) -> std::task::Poll<std::io::Result<usize>> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        b: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
         std::pin::Pin::new(&mut self.w).poll_write(cx, b)
     }
-    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         std::pin::Pin::new(&mut self.w).poll_flush(cx)
     }
-    fn poll_shutdown(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         std::pin::Pin::new(&mut self.w).poll_shutdown(cx)
     }
 }
 
 fn sanitize(s: &str) -> String {
-    s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' }).collect()
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }
 
 fn decode_wsl_text(bytes: &[u8]) -> String {
     // `wsl --list` outputs UTF-16LE on Windows.
-    if bytes.len() >= 2 && bytes.len() % 2 == 0 {
-        let u16s: Vec<u16> = bytes.chunks_exact(2)
+    if bytes.len() >= 2 && bytes.len().is_multiple_of(2) {
+        let u16s: Vec<u16> = bytes
+            .chunks_exact(2)
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         String::from_utf16_lossy(&u16s)
@@ -326,8 +408,14 @@ fn default_install_dir(distro: &str) -> PathBuf {
     #[cfg(windows)]
     {
         if let Some(base) = std::env::var_os("LOCALAPPDATA") {
-            return PathBuf::from(base).join("tokimo").join("sandboxes").join(distro);
+            return PathBuf::from(base)
+                .join("tokimo")
+                .join("sandboxes")
+                .join(distro);
         }
     }
-    std::env::temp_dir().join("tokimo").join("sandboxes").join(distro)
+    std::env::temp_dir()
+        .join("tokimo")
+        .join("sandboxes")
+        .join(distro)
 }

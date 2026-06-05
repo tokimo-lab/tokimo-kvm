@@ -8,17 +8,47 @@ pub const PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Request {
-    Hello { protocol_version: u32 },
-    Stat { path: PathBuf },
-    List { path: PathBuf },
-    Read { path: PathBuf, offset: u64, len: u32 },
-    Write { path: PathBuf, offset: u64, data: Vec<u8> },
-    Create { path: PathBuf, mode: u32 },
-    Mkdir { path: PathBuf, mode: u32 },
-    Remove { path: PathBuf },
-    Rmdir { path: PathBuf },
-    Rename { from: PathBuf, to: PathBuf },
-    Truncate { path: PathBuf, size: u64 },
+    Hello {
+        protocol_version: u32,
+    },
+    Stat {
+        path: PathBuf,
+    },
+    List {
+        path: PathBuf,
+    },
+    Read {
+        path: PathBuf,
+        offset: u64,
+        len: u32,
+    },
+    Write {
+        path: PathBuf,
+        offset: u64,
+        data: Vec<u8>,
+    },
+    Create {
+        path: PathBuf,
+        mode: u32,
+    },
+    Mkdir {
+        path: PathBuf,
+        mode: u32,
+    },
+    Remove {
+        path: PathBuf,
+    },
+    Rmdir {
+        path: PathBuf,
+    },
+    Rename {
+        from: PathBuf,
+        to: PathBuf,
+    },
+    Truncate {
+        path: PathBuf,
+        size: u64,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

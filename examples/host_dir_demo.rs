@@ -15,8 +15,9 @@ const MAGIC: &str = "hello-from-host-dir";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("tokimo=info".parse()?))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("tokimo=info".parse()?),
+        )
         .init();
 
     let host_dir = PathBuf::from(std::env::temp_dir()).join("tokimo-host-dir-demo");
@@ -50,12 +51,15 @@ async fn main() -> anyhow::Result<()> {
         if let Ok(s) = std::fs::read_to_string(&log) {
             if s.contains(MAGIC) {
                 println!("\n===== serial output =====\n{s}\n========================");
-                found = true; break;
+                found = true;
+                break;
             }
         }
     }
     sbx.stop().await?;
-    if !found { anyhow::bail!("did not observe magic string in serial log"); }
+    if !found {
+        anyhow::bail!("did not observe magic string in serial log");
+    }
     println!(">>> success");
     Ok(())
 }

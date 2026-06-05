@@ -18,19 +18,32 @@ const MAGIC: &str = "hello-from-tokimo-vfs";
 
 // ---------------- simple in-memory filesystem ----------------
 
-enum Node { File(Vec<u8>), Dir }
+enum Node {
+    File(Vec<u8>),
+    Dir,
+}
 
-struct MemoryVfs { inner: Mutex<HashMap<PathBuf, Node>> }
+struct MemoryVfs {
+    inner: Mutex<HashMap<PathBuf, Node>>,
+}
 
 impl MemoryVfs {
     fn new() -> Self {
         let mut m = HashMap::new();
         m.insert(PathBuf::from("/"), Node::Dir);
-        m.insert(PathBuf::from("/hello.txt"), Node::File(format!("{MAGIC}\n").into_bytes()));
-        Self { inner: Mutex::new(m) }
+        m.insert(
+            PathBuf::from("/hello.txt"),
+            Node::File(format!("{MAGIC}\n").into_bytes()),
+        );
+        Self {
+            inner: Mutex::new(m),
+        }
     }
     fn now_secs() -> i64 {
-        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
     }
     fn attr_of(n: &Node) -> FileAttr {
         let (kind, size) = match n {
@@ -39,8 +52,16 @@ impl MemoryVfs {
         };
         let t = Self::now_secs();
         FileAttr {
-            size, mode: if matches!(kind, FsKind::Dir) { 0o755 } else { 0o644 },
-            kind, mtime_secs: t, atime_secs: t, ctime_secs: t,
+            size,
+            mode: if matches!(kind, FsKind::Dir) {
+                0o755
+            } else {
+                0o644
+            },
+            kind,
+            mtime_secs: t,
+            atime_secs: t,
+            ctime_secs: t,
         }
     }
 }
@@ -58,10 +79,19 @@ impl TokimoVfs for MemoryVfs {
                 let mut out = vec![];
                 for (p, n) in g.iter() {
                     let p: &PathBuf = p;
-                    if p == path { continue; }
+                    if p == path {
+                        continue;
+                    }
                     if p.parent() == Some(path) {
-                        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                        let kind = match n { Node::File(_) => FsKind::File, Node::Dir => FsKind::Dir };
+                        let name = p
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let kind = match n {
+                            Node::File(_) => FsKind::File,
+                            Node::Dir => FsKind::Dir,
+                        };
                         out.push(DirEntry { name, kind });
                     }
                 }
@@ -77,7 +107,11 @@ impl TokimoVfs for MemoryVfs {
             Some(Node::File(d)) => {
                 let o = offset as usize;
                 let end = (o + len as usize).min(d.len());
-                Ok(if o >= d.len() { vec![] } else { d[o..end].to_vec() })
+                Ok(if o >= d.len() {
+                    vec![]
+                } else {
+                    d[o..end].to_vec()
+                })
             }
             Some(_) => Err(VfsError::IsADirectory),
             None => Err(VfsError::NotFound),
@@ -88,7 +122,9 @@ impl TokimoVfs for MemoryVfs {
         match g.get_mut(path) {
             Some(Node::File(d)) => {
                 let o = offset as usize;
-                if d.len() < o + data.len() { d.resize(o + data.len(), 0); }
+                if d.len() < o + data.len() {
+                    d.resize(o + data.len(), 0);
+                }
                 d[o..o + data.len()].copy_from_slice(data);
                 Ok(data.len() as u32)
             }
@@ -98,23 +134,33 @@ impl TokimoVfs for MemoryVfs {
     }
     async fn create(&self, path: &Path, _mode: u32) -> VfsResult<FileAttr> {
         let mut g = self.inner.lock().unwrap();
-        if g.contains_key(path) { return Err(VfsError::AlreadyExists); }
+        if g.contains_key(path) {
+            return Err(VfsError::AlreadyExists);
+        }
         g.insert(path.to_path_buf(), Node::File(Vec::new()));
         Ok(Self::attr_of(g.get(path).unwrap()))
     }
     async fn mkdir(&self, path: &Path, _mode: u32) -> VfsResult<FileAttr> {
         let mut g = self.inner.lock().unwrap();
-        if g.contains_key(path) { return Err(VfsError::AlreadyExists); }
+        if g.contains_key(path) {
+            return Err(VfsError::AlreadyExists);
+        }
         g.insert(path.to_path_buf(), Node::Dir);
         Ok(Self::attr_of(g.get(path).unwrap()))
     }
     async fn remove(&self, path: &Path) -> VfsResult<()> {
         let mut g = self.inner.lock().unwrap();
-        match g.remove(path) { Some(_) => Ok(()), None => Err(VfsError::NotFound) }
+        match g.remove(path) {
+            Some(_) => Ok(()),
+            None => Err(VfsError::NotFound),
+        }
     }
     async fn rmdir(&self, path: &Path) -> VfsResult<()> {
         let mut g = self.inner.lock().unwrap();
-        match g.remove(path) { Some(_) => Ok(()), None => Err(VfsError::NotFound) }
+        match g.remove(path) {
+            Some(_) => Ok(()),
+            None => Err(VfsError::NotFound),
+        }
     }
     async fn rename(&self, from: &Path, to: &Path) -> VfsResult<()> {
         let mut g = self.inner.lock().unwrap();
@@ -125,7 +171,10 @@ impl TokimoVfs for MemoryVfs {
     async fn truncate(&self, path: &Path, size: u64) -> VfsResult<()> {
         let mut g = self.inner.lock().unwrap();
         match g.get_mut(path) {
-            Some(Node::File(d)) => { d.resize(size as usize, 0); Ok(()) }
+            Some(Node::File(d)) => {
+                d.resize(size as usize, 0);
+                Ok(())
+            }
             Some(_) => Err(VfsError::IsADirectory),
             None => Err(VfsError::NotFound),
         }
@@ -135,8 +184,9 @@ impl TokimoVfs for MemoryVfs {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("tokimo=info".parse()?))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("tokimo=info".parse()?),
+        )
         .init();
 
     let vfs: Arc<dyn TokimoVfs> = Arc::new(MemoryVfs::new());
@@ -167,12 +217,15 @@ async fn main() -> anyhow::Result<()> {
         if let Ok(s) = std::fs::read_to_string(&log) {
             if s.contains(MAGIC) {
                 println!("\n===== serial output =====\n{s}\n========================");
-                found = true; break;
+                found = true;
+                break;
             }
         }
     }
     sbx.stop().await?;
-    if !found { anyhow::bail!("did not observe magic string"); }
+    if !found {
+        anyhow::bail!("did not observe magic string");
+    }
     println!(">>> success");
     Ok(())
 }

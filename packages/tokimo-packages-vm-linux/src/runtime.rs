@@ -21,7 +21,13 @@ impl Runtime {
         let monitor_sock = root.join("monitor.sock");
         let _ = std::fs::remove_file(&qmp_sock);
         let _ = std::fs::remove_file(&monitor_sock);
-        Ok(Self { root, serial_log, serial_sock, qmp_sock, monitor_sock })
+        Ok(Self {
+            root,
+            serial_log,
+            serial_sock,
+            qmp_sock,
+            monitor_sock,
+        })
     }
 }
 
@@ -29,7 +35,10 @@ pub fn default_runtime_root(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("tokimo-{name}-{}", std::process::id()))
 }
 
+#[allow(dead_code)]
 pub fn ensure_dir(p: &Path) -> std::io::Result<()> {
-    if !p.exists() { std::fs::create_dir_all(p)?; }
+    if !p.exists() {
+        std::fs::create_dir_all(p)?;
+    }
     Ok(())
 }
